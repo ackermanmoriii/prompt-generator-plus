@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Prompt Mastermind</title>
+    <!-- Favicon to fix 404 -->
+    <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Marked.js -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=JetBrains+Mono:wght@400;700&display=swap');
+
+        :root {
+            --terminal-font: 'JetBrains Mono', monospace;
+            --ui-font: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: #0f1115;
+            color: #e2e8f0;
+            font-family: var(--ui-font);
+            overflow: hidden;
+        }
+
+        /* Mac OS Terminal Styling */
+        .mac-terminal {
+            background: rgba(30, 30, 30, 0.98);
+            border-radius: 8px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            font-family: var(--terminal-font);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            height: 100%;
+            backdrop-filter: blur(10px);
+            position: relative;
+        }
+
+        .mac-header {
+            background: linear-gradient(to bottom, #3a3a3a, #2b2b2b);
+            padding: 8px 12px;
+            display: flex;
+            align-items: center;
+            border-bottom: 1px solid #000;
+        }
+
+        .window-controls { display: flex; gap: 8px; }
+        .control-dot { width: 12px; height: 12px; border-radius: 50%; }
+        .dot-red { background-color: #ff5f56; }
+        .dot-yellow { background-color: #ffbd2e; }
+        .dot-green { background-color: #27c93f; }
+
+        .terminal-content {
+            padding: 20px;
+            color: #d4d4d4;
+            overflow-y: auto;
+            flex-grow: 1;
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+        
+        /* Markdown Styling inside Terminal */
+        .terminal-content h1, .terminal-content h2 { color: #fff; font-weight: bold; margin-top: 1em; }
+        .terminal-content code { color: #ce9178; }
+        .terminal-content pre { 
+            background: #1e1e1e; 
+            padding: 10px; 
+            border-radius: 4px; 
+            border: 1px solid #444;
+            overflow-x: auto;
+        }
+
+        /* Input Area */
+        .input-area { background: #1a1b1e; border-top: 1px solid #333; }
+        textarea { resize: none; }
+        
+        /* Animations */
+        @keyframes blink { 50% { opacity: 0; } }
+        .cursor { animation: blink 1s step-end infinite; }
+
+        /* Floating Translator Button */
+        #translator-btn {
+            position: fixed; /* Fixed to viewport to avoid overflow clipping */
+            z-index: 50;
+            background: #3b82f6;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            font-family: var(--ui-font);
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            transition: all 0.2s;
+            transform: translateY(0);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        #translator-btn:hover {
+            background: #2563eb;
+            transform: translateY(-2px);
+        }
+
+        /* Translation Box (Modal) */
+        .translation-box {
+            background: #1f2937;
+            border: 1px solid #374151;
+            border-radius: 8px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.7);
+            max-width: 500px;
+            width: 90%;
+            position: absolute; /* Centered in container */
+            z-index: 100;
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col">
+
+    <!-- Navbar -->
+    <header class="flex justify-between items-center px-6 py-4 bg-gray-900 border-b border-gray-800">
+        <div class="flex items-center gap-3">
+            <i class="fa-solid fa-brain text-purple-500 text-xl"></i>
+            <h1 class="text-xl font-semibold">Gemini <span class="text-purple-500">Mastermind</span></h1>
+        </div>
+        <div class="flex items-center gap-4">
+            <!-- Connection Status -->
+            <div id="conn-status" class="hidden items-center gap-2 text-green-400 text-xs font-mono bg-green-400/10 px-3 py-1 rounded-full border border-green-500/20">
+                <i class="fa-solid fa-link"></i> Connected
+            </div>
+            
+            <span id="resource-counter" class="text-xs px-2 py-1 rounded bg-gray-800 text-gray-400 transition-all">
+                <i class="fa-solid fa-book mr-1"></i> <span id="res-count-num">0</span>/4 Resources
+            </span>
+            <button onclick="toggleSettings()" class="text-gray-400 hover:text-white transition-colors relative">
+                <i class="fa-solid fa-cog text-xl"></i>
+                <span id="settings-dot" class="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-gray-900"></span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="flex-grow p-4 relative overflow-hidden flex justify-center items-center">
+        
+        <!-- Floating Translator Button (Hidden by default) -->
+        <button id="translator-btn" class="hidden" onmousedown="translateSelection(event)">
+            <i class="fa-solid fa-language mr-1"></i> Translator
+        </button>
+
+        <!-- Translation Modal (Hidden by default) -->
+        <div id="translation-modal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center">
+            <div class="translation-box p-5 animate-fade-in-up">
+                <div class="flex justify-between items-start mb-3 border-b border-gray-600 pb-3">
+                    <h3 class="text-green-400 text-sm font-bold font-mono uppercase tracking-wider">
+                        <i class="fa-solid fa-globe mr-2"></i> Persian Translation
+                    </h3>
+                    <button onclick="closeTranslation()" class="text-gray-400 hover:text-white hover:rotate-90 transition-transform">
+                        <i class="fa-solid fa-xmark text-lg"></i>
+                    </button>
+                </div>
+                <div id="translation-result" class="text-gray-200 text-lg leading-relaxed font-sans min-h-[50px]" dir="rtl">
+                    <!-- Result goes here -->
+                </div>
+            </div>
+        </div>
+
+        <div class="mac-terminal w-full max-w-5xl" id="terminal-container">
+            <div class="mac-header">
+                <div class="window-controls">
+                    <div class="control-dot dot-red"></div>
+                    <div class="control-dot dot-yellow"></div>
+                    <div class="control-dot dot-green"></div>
+                </div>
+                <div class="flex-grow text-center text-xs text-gray-400 font-mono">
+                    mastermind-console — python — 80x24
+                </div>
+                <div class="flex gap-4 text-gray-400 text-xs items-center">
+                    <!-- Regenerate Button -->
+                    <button onclick="regeneratePrompt()" title="Regenerate" class="hover:text-blue-400 transition-colors flex items-center gap-1">
+                        <i class="fa-solid fa-rotate-right"></i>
+                    </button>
+                    <!-- Copy Button -->
+                    <button onclick="copyOutput()" title="Copy" class="hover:text-green-400 transition-colors">
+                        <i class="fa-regular fa-copy"></i>
+                    </button>
+                </div>
+            </div>
+            <div id="output-content" class="terminal-content custom-scrollbar relative">
+                <div class="text-gray-500">
+                    > System initialized.<br>
+                    > Waiting for input...<span class="cursor">_</span>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Input Area -->
+    <div class="input-area p-4 pb-8">
+        <div class="max-w-5xl mx-auto relative">
+            <textarea 
+                id="user-prompt" 
+                rows="1" 
+                placeholder="Enter prompt in English or Persian... (Shift+Enter for new line)" 
+                class="w-full bg-[#2a2b30] text-white rounded-xl px-5 py-4 pr-12 focus:outline-none focus:ring-2 focus:ring-purple-500/50 shadow-lg text-lg"
+                oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"
+                onkeydown="if(event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); submitPrompt(); }"
+            ></textarea>
+            <button onclick="submitPrompt()" class="absolute right-3 bottom-3 text-purple-400 hover:text-white p-2">
+                <i class="fa-solid fa-paper-plane text-xl"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Settings / Upload Modal -->
+    <div id="settings-modal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="toggleSettings()"></div>
+        <div class="absolute right-0 top-0 h-full w-full md:w-96 bg-[#1a1b1e] border-l border-gray-700 p-6 shadow-2xl transition-transform transform translate-x-full" id="settings-panel">
+            
+            <h2 class="text-xl font-bold text-white mb-6">Configuration</h2>
+            
+            <!-- API Key -->
+            <div class="mb-6">
+                <label class="block text-sm text-gray-400 mb-2">Gemini API Key</label>
+                <div class="flex gap-2">
+                    <input type="password" id="api-key" class="flex-grow bg-gray-800 border border-gray-700 rounded p-2 text-white text-sm" placeholder="AIzaSy...">
+                    <button onclick="verifyAndSetKey()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded text-sm font-semibold transition-colors">
+                        Set
+                    </button>
+                </div>
+                <p id="key-msg" class="text-xs mt-2 h-4"></p>
+            </div>
+
+            <!-- Resource Upload -->
+            <div class="mb-6">
+                <h3 class="text-sm font-semibold text-purple-400 mb-2">Knowledge Base Resources</h3>
+                <p class="text-xs text-gray-500 mb-3">Max 4 files (PDF, EPUB, TXT). Auto-synced.</p>
+                
+                <div class="border-2 border-dashed border-gray-700 rounded-lg p-6 text-center hover:border-purple-500 cursor-pointer relative">
+                    <input type="file" id="file-upload" class="absolute inset-0 opacity-0 cursor-pointer" onchange="uploadFile(this)">
+                    <i class="fa-solid fa-cloud-upload text-2xl text-gray-500"></i>
+                    <p class="text-xs text-gray-400 mt-2">Click to Upload</p>
+                </div>
+                
+                <div id="file-list" class="mt-4 space-y-2">
+                    <!-- Files injected here -->
+                </div>
+                
+                <button onclick="clearResources()" class="text-xs text-red-400 mt-2 hover:underline">Clear All Resources</button>
+            </div>
+
+            <button onclick="toggleSettings()" class="w-full bg-purple-600 hover:bg-purple-500 text-white py-2 rounded">Done</button>
+        </div>
+    </div>
+
+    <script>
+        // Define Base URL logic
+        const getBaseUrl = () => {
+            const protocol = window.location.protocol;
+            if (protocol === 'file:' || protocol === 'blob:' || window.location.host.includes('scf.usercontent.goog')) {
+                return 'http://127.0.0.1:5000';
+            }
+            return ''; 
+        };
+        const API_BASE = getBaseUrl();
+        
+        let lastPrompt = ""; // State to store last prompt
+
+        // On Load
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedKey = localStorage.getItem('gemini_api_key');
+            if (savedKey) {
+                document.getElementById('api-key').value = savedKey;
+                document.getElementById('settings-dot').classList.add('hidden'); 
+                verifyAndSetKey(true); 
+            }
+            fetchResources();
+            
+            // Listen for text selection to show translator button
+            document.addEventListener('selectionchange', handleSelection);
+        });
+
+        function toggleSettings() {
+            const modal = document.getElementById('settings-modal');
+            const panel = document.getElementById('settings-panel');
+            if (modal.classList.contains('hidden')) {
+                modal.classList.remove('hidden');
+                setTimeout(() => panel.classList.remove('translate-x-full'), 10);
+            } else {
+                panel.classList.add('translate-x-full');
+                setTimeout(() => modal.classList.add('hidden'), 300);
+            }
+        }
+
+        async function verifyAndSetKey(silent = false) {
+            const key = document.getElementById('api-key').value;
+            const msgEl = document.getElementById('key-msg');
+            
+            if (!key) {
+                if(!silent) msgEl.innerHTML = '<span class="text-red-500">Key is empty!</span>';
+                return;
+            }
+
+            if(!silent) msgEl.innerHTML = '<span class="text-blue-400">Verifying...</span>';
+
+            try {
+                const response = await fetch(`${API_BASE}/verify_key`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ api_key: key })
+                });
+                
+                if (!response.ok) throw new Error(`Status: ${response.status}`);
+                const data = await response.json();
+
+                if (data.valid) {
+                    localStorage.setItem('gemini_api_key', key);
+                    document.getElementById('settings-dot').classList.add('hidden');
+                    document.getElementById('conn-status').classList.remove('hidden');
+                    document.getElementById('conn-status').classList.add('flex');
+                    if(!silent) {
+                        msgEl.innerHTML = '<span class="text-green-400"><i class="fa-solid fa-check"></i> Connected Successfully</span>';
+                        setTimeout(() => toggleSettings(), 1000); 
+                    }
+                } else {
+                    document.getElementById('conn-status').classList.add('hidden');
+                    if(!silent) msgEl.innerHTML = `<span class="text-red-500">Error: ${data.message}</span>`;
+                }
+            } catch (e) {
+                if(!silent) msgEl.innerHTML = `<span class="text-red-500">Network Error: ${e.message}</span>`;
+            }
+        }
+
+        async function fetchResources() {
+            try {
+                const response = await fetch(`${API_BASE}/get_resources`);
+                const data = await response.json();
+                document.getElementById('res-count-num').innerText = data.count;
+                
+                const list = document.getElementById('file-list');
+                list.innerHTML = ''; 
+                data.files.forEach(f => {
+                    const div = document.createElement('div');
+                    div.className = "text-xs bg-gray-800 p-2 rounded flex justify-between text-gray-300";
+                    div.innerHTML = `<span>${f.name}</span> <span class="text-gray-500">${Math.round(f.size/1024)}KB</span>`;
+                    list.appendChild(div);
+                });
+            } catch (e) {
+                console.error("Failed to sync resources", e);
+            }
+        }
+
+        async function uploadFile(input) {
+            const file = input.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch(`${API_BASE}/upload_resource`, { method: 'POST', body: formData });
+                const data = await response.json();
+                
+                if (response.ok) {
+                    fetchResources(); // Re-sync UI
+                } else {
+                    alert(data.error);
+                }
+            } catch (e) {
+                alert("Upload failed.");
+            }
+            input.value = ''; // Reset
+        }
+
+        async function clearResources() {
+            if(confirm("Delete all files?")) {
+                await fetch(`${API_BASE}/clear_resources`, { method: 'POST' });
+                fetchResources();
+            }
+        }
+
+        // --- Core Prompt Logic ---
+
+        async function submitPrompt() {
+            const inputEl = document.getElementById('user-prompt');
+            const prompt = inputEl.value;
+            const apiKey = localStorage.getItem('gemini_api_key');
+            const outputDiv = document.getElementById('output-content');
+
+            if (!prompt) return;
+            if (!apiKey) { toggleSettings(); return; }
+
+            // Store prompt for regeneration feature
+            lastPrompt = prompt;
+
+            // UI Loading State
+            inputEl.value = '';
+            outputDiv.innerHTML = `
+                <div class="text-gray-400 mb-2">> User: ${prompt}</div>
+                <div class="text-purple-400 animate-pulse">> Mastermind is thinking... (Phase: Translation -> Retrieval -> Generation)</div>
+            `;
+
+            try {
+                const response = await fetch(`${API_BASE}/generate_prompt`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ api_key: apiKey, prompt: prompt })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    const htmlContent = marked.parse(data.result);
+                    const metaHtml = data.meta.map(m => `<div class="text-xs text-gray-600 mt-1">> [Log]: ${m}</div>`).join('');
+                    
+                    outputDiv.innerHTML = `
+                        <div class="text-gray-400 mb-4">> User: ${prompt}</div>
+                        ${metaHtml}
+                        <div class="mt-4 select-text" id="generated-text">${htmlContent}</div>
+                        <div class="mt-4 text-gray-500">> <span class="cursor">_</span></div>
+                    `;
+                } else {
+                    outputDiv.innerHTML += `<div class="text-red-500 mt-2">Error: ${data.error}</div>`;
+                }
+            } catch (e) {
+                outputDiv.innerHTML += `<div class="text-red-500 mt-2">Network Error. Check console.</div>`;
+            }
+        }
+
+        function regeneratePrompt() {
+            if (lastPrompt) {
+                // Set the input value to the last prompt and submit
+                document.getElementById('user-prompt').value = lastPrompt;
+                submitPrompt();
+            } else {
+                alert("No previous prompt found in history.");
+            }
+        }
+
+        function copyOutput() {
+            const text = document.getElementById('output-content').innerText;
+            navigator.clipboard.writeText(text);
+        }
+
+        // --- Highlighting & Translation Logic ---
+
+        function handleSelection() {
+            const selection = window.getSelection();
+            const btn = document.getElementById('translator-btn');
+            const outputContainer = document.getElementById('output-content');
+
+            // Only show button if there is text selected AND it's inside the terminal
+            if (selection.toString().trim().length > 0 && outputContainer.contains(selection.anchorNode)) {
+                const range = selection.getRangeAt(0);
+                const rect = range.getBoundingClientRect();
+
+                // Position the button above the selection
+                // Using fixed positioning calculated from rect
+                btn.style.left = `${rect.left + (rect.width / 2) - 40}px`; // Center horizonally (approx)
+                btn.style.top = `${rect.top - 40}px`; // 40px above
+                
+                btn.classList.remove('hidden');
+            } else {
+                btn.classList.add('hidden');
+            }
+        }
+
+        async function translateSelection(event) {
+            // Prevent the button click from deselecting the text immediately
+            event.preventDefault(); 
+            
+            const selection = window.getSelection().toString();
+            if (!selection) return;
+
+            const apiKey = localStorage.getItem('gemini_api_key');
+            if(!apiKey) { alert("API Key missing"); return; }
+
+            // Show Modal and Loading
+            const modal = document.getElementById('translation-modal');
+            const resultDiv = document.getElementById('translation-result');
+            modal.classList.remove('hidden');
+            resultDiv.innerHTML = '<div class="flex items-center gap-2"><i class="fa-solid fa-spinner fa-spin text-purple-400"></i> <span class="text-gray-400">Translating to Simplified Persian...</span></div>';
+
+            // Hide the floating button
+            document.getElementById('translator-btn').classList.add('hidden');
+
+            try {
+                const response = await fetch(`${API_BASE}/translate_snippet`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ api_key: apiKey, text: selection })
+                });
+                
+                const data = await response.json();
+                
+                if (data.translation) {
+                    // Replace newlines with breaks for display
+                    resultDiv.innerHTML = data.translation.replace(/\n/g, '<br>');
+                } else {
+                    resultDiv.innerHTML = `<span class="text-red-400">Error: ${data.error}</span>`;
+                }
+            } catch (e) {
+                resultDiv.innerHTML = `<span class="text-red-400">Network Error</span>`;
+            }
+        }
+
+        function closeTranslation() {
+            document.getElementById('translation-modal').classList.add('hidden');
+            // Clear selection
+            if (window.getSelection) {window.getSelection().removeAllRanges();}
+        }
+    </script>
+</body>
+</html>
