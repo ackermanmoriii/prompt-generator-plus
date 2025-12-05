@@ -1,0 +1,6 @@
+flask
+google-generativeai
+pypdf
+ebooklib
+beautifulsoup4
+markdown
