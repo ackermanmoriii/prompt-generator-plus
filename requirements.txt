@@ -4,3 +4,4 @@ pypdf
 ebooklib
 beautifulsoup4
 markdown
+gunicorn
